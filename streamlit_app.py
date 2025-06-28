@@ -15,6 +15,18 @@ def load_model():
 
 model = load_model()
 
+# Function to detect available cameras
+def detect_cameras():
+    available_cameras = []
+    for i in range(10):  # Check first 10 camera indices
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret:
+                available_cameras.append(i)
+            cap.release()
+    return available_cameras
+
 # Function to check detection status and control fan
 def check_detection_status(results):
     if len(results) == 0 or len(results[0].boxes) == 0:
@@ -275,8 +287,40 @@ elif option == "Webcam":
         Note: This may not work on all mobile devices due to browser limitations.
         """)
         
+        # Camera detection and selection
+        st.sidebar.markdown("### 📹 Camera Detection")
+        
+        if st.sidebar.button("🔍 Detect Available Cameras"):
+            with st.spinner("Detecting cameras..."):
+                available_cameras = detect_cameras()
+                if available_cameras:
+                    st.sidebar.success(f"Found cameras: {available_cameras}")
+                    st.session_state.available_cameras = available_cameras
+                else:
+                    st.sidebar.error("No cameras detected!")
+                    st.sidebar.info("""
+                    **Troubleshooting:**
+                    1. Check if camera is connected
+                    2. Close other apps using camera
+                    3. Try Image Upload instead
+                    """)
+        
         # Camera source selection
-        camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
+        if 'available_cameras' in st.session_state and st.session_state.available_cameras:
+            camera_index = st.sidebar.selectbox(
+                "Select Camera:", 
+                st.session_state.available_cameras,
+                help="Choose from detected cameras"
+            )
+        else:
+            camera_index = st.sidebar.number_input(
+                "Camera Index", 
+                min_value=0, 
+                max_value=10, 
+                value=0, 
+                step=1, 
+                help="0=default camera, 1=second camera, etc."
+            )
         
         # Real-time detection controls
         col1, col2, col3 = st.columns(3)
@@ -285,7 +329,10 @@ elif option == "Webcam":
         with col2:
             stop_button = st.button("⏹️ Stop Detection", key="stop_realtime")
         with col3:
-            st.write("**Status:** Ready")
+            if 'running_realtime' in st.session_state and st.session_state.running_realtime:
+                st.write("**Status:** Running")
+            else:
+                st.write("**Status:** Ready")
         
         # Create placeholders for video streams
         col1, col2 = st.columns(2)
@@ -312,7 +359,14 @@ elif option == "Webcam":
             if st.session_state.cap_realtime is None:
                 st.session_state.cap_realtime = cv2.VideoCapture(camera_index)
                 if not st.session_state.cap_realtime.isOpened():
-                    st.error("Could not open webcam. Please check if your webcam is connected.")
+                    st.error(f"Could not open camera {camera_index}. Please check if your camera is connected and not being used by another application.")
+                    st.info("""
+                    **Troubleshooting:**
+                    1. **Click 'Detect Available Cameras'** to find working cameras
+                    2. **Close other apps** that might be using the camera
+                    3. **Try a different camera index**
+                    4. **Use Image Upload** as an alternative
+                    """)
                     st.session_state.running_realtime = False
         
         if stop_button:
@@ -410,4 +464,4 @@ st.sidebar.markdown("2. **Webcam - Capture**: Take a single photo for detection"
 st.sidebar.markdown("3. **Webcam - Real-Time**: Continuous detection from webcam")
 st.sidebar.markdown("4. **Fan Control**: Fan turns ON when both chair and minifan are detected")
 st.sidebar.markdown("5. **Mobile**: Use Image Upload for best mobile experience")
-st.sidebar.markdown("6. **Webcam Issues**: Follow the permission guide above") 
+st.sidebar.markdown("6. **Camera Issues**: Use 'Detect Available Cameras' button") 
