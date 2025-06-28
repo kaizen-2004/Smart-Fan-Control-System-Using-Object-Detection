@@ -15,32 +15,6 @@ def load_model():
 
 model = load_model()
 
-# Detect mobile device using JavaScript
-def is_mobile():
-    # Use JavaScript to detect mobile device
-    js_code = """
-    <script>
-    function checkMobile() {
-        const userAgent = navigator.userAgent;
-        const mobileKeywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'Windows Phone'];
-        const isMobile = mobileKeywords.some(keyword => userAgent.includes(keyword));
-        return isMobile;
-    }
-    </script>
-    """
-    st.markdown(js_code, unsafe_allow_html=True)
-    
-    # For now, return False to avoid issues - we'll handle mobile detection differently
-    return False
-
-# Sidebar for controls
-st.sidebar.title("Controls")
-
-# Show mobile-friendly options
-st.sidebar.info("📱 **Mobile Tip**: Use Image Upload for best mobile experience!")
-
-option = st.sidebar.radio("Choose input source:", ("Webcam", "Image Upload"))
-
 # Function to check detection status and control fan
 def check_detection_status(results):
     if len(results) == 0 or len(results[0].boxes) == 0:
@@ -73,143 +47,16 @@ def check_detection_status(results):
     
     return detected_classes, status, fan_state
 
-if option == "Webcam":
-    st.write("### Real-Time Webcam Detection")
-    
-    # Webcam warning for mobile users
-    st.info("""
-    📱 **Mobile Users**: Webcam may not work on mobile devices due to browser restrictions. 
-    If webcam doesn't work, please use the **Image Upload** option instead.
-    """)
-    
-    # Webcam controls
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        start_button = st.button("Start Webcam", key="start")
-    with col2:
-        stop_button = st.button("Stop Webcam", key="stop")
-    with col3:
-        confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.1)
-    
-    # Camera source selection
-    camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
-    
-    # Create placeholders for video streams
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("### Original Feed")
-        original_placeholder = st.empty()
-    
-    with col2:
-        st.write("### Detection Results")
-        detection_placeholder = st.empty()
-    
-    # Status and fan animation area
-    status_placeholder = st.empty()
-    fan_animation_placeholder = st.empty()
-    
-    # Initialize webcam
-    if 'cap' not in st.session_state:
-        st.session_state.cap = None
-        st.session_state.running = False
-    
-    if start_button:
-        st.session_state.running = True
-        if st.session_state.cap is None:
-            st.session_state.cap = cv2.VideoCapture(camera_index)
-            if not st.session_state.cap.isOpened():
-                st.error("Could not open webcam. Please check if your webcam is connected.")
-                st.session_state.running = False
-    
-    if stop_button:
-        st.session_state.running = False
-        if st.session_state.cap is not None:
-            st.session_state.cap.release()
-            st.session_state.cap = None
-    
-    # Main webcam loop
-    if st.session_state.running and st.session_state.cap is not None:
-        try:
-            while st.session_state.running:
-                ret, frame = st.session_state.cap.read()
-                if not ret:
-                    st.error("Failed to grab frame from webcam")
-                    break
-                
-                # Show original frame
-                original_placeholder.image(frame, channels="BGR", use_container_width=True)
-                
-                # Run detection
-                results = model(frame, conf=confidence_threshold)
-                
-                # Get detection result
-                if len(results) > 0:
-                    result_img = results[0].plot()
-                    detection_placeholder.image(result_img, channels="BGR", use_container_width=True)
-                    
-                    # Check detection status and control fan
-                    detected_classes, status, fan_state = check_detection_status(results)
-                    
-                    # Display status
-                    if fan_state == "fan_on":
-                        status_placeholder.success(status)
-                    else:
-                        status_placeholder.warning(status)
-                    
-                    # Display fan animation if both objects detected
-                    if fan_state == "fan_on":
-                        fan_animation_placeholder.markdown("### 🌀 Spinning Fan Simulation")
-                        fan_animation_placeholder.markdown("""
-                        ```
-                        ╭─────────────────╮
-                        │    🌀 FAN ON 🌀    │
-                        │   ╭─────────╮   │
-                        │   │  ⚡⚡⚡   │   │
-                        │   │ ⚡🌀🌀🌀⚡  │   │
-                        │   │⚡🌀🌀🌀🌀🌀⚡ │   │
-                        │   │ ⚡🌀🌀🌀⚡  │   │
-                        │   │  ⚡⚡⚡   │   │
-                        │   ╰─────────╯   │
-                        │                 │
-                        ╰─────────────────╯
-                        ```
-                        """)
-                    else:
-                        fan_animation_placeholder.markdown("### 💤 Fan Status: OFF")
-                        fan_animation_placeholder.markdown("""
-                        ```
-                        ╭─────────────────╮
-                        │   💤 FAN OFF 💤   │
-                        │   ╭─────────╮   │
-                        │   │  ⚪⚪⚪   │   │
-                        │   │ ⚪⚪⚪⚪⚪  │   │
-                        │   │⚪⚪⚪⚪⚪⚪⚪ │   │
-                        │   │ ⚪⚪⚪⚪⚪  │   │
-                        │   │  ⚪⚪⚪   │   │
-                        │   ╰─────────╯   │
-                        │                 │
-                        ╰─────────────────╯
-                        ```
-                        """)
-                    
-                    # Display detection info in sidebar
-                    if detected_classes:
-                        st.sidebar.markdown("### 📊 Detection Summary:")
-                        for class_name in detected_classes:
-                            st.sidebar.write(f"• {class_name}")
-                
-                time.sleep(0.1)  # Small delay to prevent overwhelming the UI
-                
-        except Exception as e:
-            st.error(f"Error in webcam stream: {str(e)}")
-            st.session_state.running = False
-    
-    # Cleanup when app stops
-    if st.session_state.cap is not None:
-        st.session_state.cap.release()
+# Sidebar for controls
+st.sidebar.title("Controls")
 
-elif option == "Image Upload":
+# Show mobile-friendly options
+st.sidebar.info("📱 **Mobile Tip**: Use Image Upload for best mobile experience!")
+
+# Make Image Upload the default option
+option = st.sidebar.radio("Choose input source:", ("Image Upload", "Webcam"), index=0)
+
+if option == "Image Upload":
     st.write("### Image Upload Detection")
     
     # Mobile-friendly upload instructions
@@ -285,11 +132,282 @@ elif option == "Image Upload":
             for class_name in detected_classes:
                 st.write(f"• {class_name}")
 
+elif option == "Webcam":
+    st.write("### Webcam Detection")
+    
+    # Webcam mode selection
+    webcam_mode = st.radio("Choose webcam mode:", ("Capture Image", "Real-Time Detection"), index=0)
+    
+    # Confidence threshold
+    confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.1)
+    
+    if webcam_mode == "Capture Image":
+        # Detailed webcam permission guide
+        st.info("""
+        📷 **Webcam Access Guide**
+        
+        To enable webcam access, follow these steps:
+        
+        **Step 1: Check Browser Address Bar**
+        - Look for a camera icon (📷) or lock icon (🔒) in the address bar
+        - Click on it to manage permissions
+        
+        **Step 2: Allow Camera Access**
+        - Select "Allow" when prompted for camera access
+        - If you see "Block", change it to "Allow"
+        
+        **Step 3: Refresh the Page**
+        - After allowing permissions, refresh the page
+        - The camera should now work
+        
+        **Step 4: Alternative Solution**
+        - If webcam still doesn't work, use Image Upload instead
+        - Take a photo with your phone/computer camera and upload it
+        """)
+        
+        # Try to use webcam with better error handling
+        try:
+            # Add a button to test camera access
+            if st.button("🔧 Test Camera Access"):
+                st.info("Testing camera access... Please allow camera permissions if prompted.")
+            
+            webcam_image = st.camera_input("📷 Click here to take a picture for detection")
+            
+            if webcam_image is not None:
+                # Convert to PIL Image
+                image = Image.open(webcam_image)
+                
+                # Create two columns for display
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("### Original Image")
+                    st.image(image, caption="Webcam Capture", use_container_width=True)
+                
+                with col2:
+                    st.write("### Detection Result")
+                    # Convert PIL Image to numpy array
+                    img_array = np.array(image)
+                    results = model(img_array, conf=confidence_threshold)
+                    result_img = results[0].plot()
+                    st.image(result_img, caption="Detection Result", use_container_width=True)
+                
+                # Check detection status and control fan
+                detected_classes, status, fan_state = check_detection_status(results)
+                
+                # Display status
+                if fan_state == "fan_on":
+                    st.success(status)
+                else:
+                    st.warning(status)
+                
+                # Display fan animation if both objects detected
+                if fan_state == "fan_on":
+                    st.markdown("### 🌀 Spinning Fan Simulation")
+                    st.markdown("""
+                    ```
+                    ╭─────────────────╮
+                    │    🌀 FAN ON 🌀    │
+                    │   ╭─────────╮   │
+                    │   │  ⚡⚡⚡   │   │
+                    │   │ ⚡🌀🌀🌀⚡  │   │
+                    │   │⚡🌀🌀🌀🌀🌀⚡ │   │
+                    │   │ ⚡🌀🌀🌀⚡  │   │
+                    │   │  ⚡⚡⚡   │   │
+                    │   ╰─────────╯   │
+                    │                 │
+                    ╰─────────────────╯
+                    ```
+                    """)
+                else:
+                    st.markdown("### 💤 Fan Status: OFF")
+                    st.markdown("""
+                    ```
+                    ╭─────────────────╮
+                    │   💤 FAN OFF 💤   │
+                    │   ╭─────────╮   │
+                    │   │  ⚪⚪⚪   │   │
+                    │   │ ⚪⚪⚪⚪⚪  │   │
+                    │   │⚪⚪⚪⚪⚪⚪⚪ │   │
+                    │   │ ⚪⚪⚪⚪⚪  │   │
+                    │   │  ⚪⚪⚪   │   │
+                    │   ╰─────────╯   │
+                    │                 │
+                    ╰─────────────────╯
+                    ```
+                    """)
+                
+                # Display detection info in sidebar
+                if detected_classes:
+                    st.sidebar.markdown("### 📊 Detection Summary:")
+                    for class_name in detected_classes:
+                        st.sidebar.write(f"• {class_name}")
+            
+            else:
+                st.write("📷 **Click the camera button above to take a picture for detection**")
+                st.warning("""
+                ⚠️ **Camera Not Working?**
+                
+                If you can't see the camera button or it's not working:
+                
+                1. **Check browser permissions** (see guide above)
+                2. **Try a different browser** (Chrome, Firefox, Safari)
+                3. **Use Image Upload** instead (works on all devices)
+                4. **Check if camera is being used by another app**
+                """)
+                
+        except Exception as e:
+            st.error(f"Webcam error: {str(e)}")
+            st.info("""
+            🔧 **Troubleshooting Tips:**
+            
+            - **Close other apps** that might be using the camera
+            - **Try a different browser**
+            - **Use Image Upload** as an alternative
+            - **Check your camera drivers** are working
+            """)
+    
+    elif webcam_mode == "Real-Time Detection":
+        st.info("""
+        🔄 **Real-Time Detection Mode**
+        
+        This mode provides continuous detection from your webcam.
+        Note: This may not work on all mobile devices due to browser limitations.
+        """)
+        
+        # Camera source selection
+        camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
+        
+        # Real-time detection controls
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            start_button = st.button("▶️ Start Real-Time Detection", key="start_realtime")
+        with col2:
+            stop_button = st.button("⏹️ Stop Detection", key="stop_realtime")
+        with col3:
+            st.write("**Status:** Ready")
+        
+        # Create placeholders for video streams
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("### Original Feed")
+            original_placeholder = st.empty()
+        
+        with col2:
+            st.write("### Detection Results")
+            detection_placeholder = st.empty()
+        
+        # Status and fan animation area
+        status_placeholder = st.empty()
+        fan_animation_placeholder = st.empty()
+        
+        # Initialize webcam for real-time detection
+        if 'cap_realtime' not in st.session_state:
+            st.session_state.cap_realtime = None
+            st.session_state.running_realtime = False
+        
+        if start_button:
+            st.session_state.running_realtime = True
+            if st.session_state.cap_realtime is None:
+                st.session_state.cap_realtime = cv2.VideoCapture(camera_index)
+                if not st.session_state.cap_realtime.isOpened():
+                    st.error("Could not open webcam. Please check if your webcam is connected.")
+                    st.session_state.running_realtime = False
+        
+        if stop_button:
+            st.session_state.running_realtime = False
+            if st.session_state.cap_realtime is not None:
+                st.session_state.cap_realtime.release()
+                st.session_state.cap_realtime = None
+        
+        # Main real-time detection loop
+        if st.session_state.running_realtime and st.session_state.cap_realtime is not None:
+            try:
+                while st.session_state.running_realtime:
+                    ret, frame = st.session_state.cap_realtime.read()
+                    if not ret:
+                        st.error("Failed to grab frame from webcam")
+                        break
+                    
+                    # Show original frame
+                    original_placeholder.image(frame, channels="BGR", use_container_width=True)
+                    
+                    # Run detection
+                    results = model(frame, conf=confidence_threshold)
+                    
+                    # Get detection result
+                    if len(results) > 0:
+                        result_img = results[0].plot()
+                        detection_placeholder.image(result_img, channels="BGR", use_container_width=True)
+                        
+                        # Check detection status and control fan
+                        detected_classes, status, fan_state = check_detection_status(results)
+                        
+                        # Display status
+                        if fan_state == "fan_on":
+                            status_placeholder.success(status)
+                        else:
+                            status_placeholder.warning(status)
+                        
+                        # Display fan animation if both objects detected
+                        if fan_state == "fan_on":
+                            fan_animation_placeholder.markdown("### 🌀 Spinning Fan Simulation")
+                            fan_animation_placeholder.markdown("""
+                            ```
+                            ╭─────────────────╮
+                            │    🌀 FAN ON 🌀    │
+                            │   ╭─────────╮   │
+                            │   │  ⚡⚡⚡   │   │
+                            │   │ ⚡🌀🌀🌀⚡  │   │
+                            │   │⚡🌀🌀🌀🌀🌀⚡ │   │
+                            │   │ ⚡🌀🌀🌀⚡  │   │
+                            │   │  ⚡⚡⚡   │   │
+                            │   ╰─────────╯   │
+                            │                 │
+                            ╰─────────────────╯
+                            ```
+                            """)
+                        else:
+                            fan_animation_placeholder.markdown("### 💤 Fan Status: OFF")
+                            fan_animation_placeholder.markdown("""
+                            ```
+                            ╭─────────────────╮
+                            │   💤 FAN OFF 💤   │
+                            │   ╭─────────╮   │
+                            │   │  ⚪⚪⚪   │   │
+                            │   │ ⚪⚪⚪⚪⚪  │   │
+                            │   │⚪⚪⚪⚪⚪⚪⚪ │   │
+                            │   │ ⚪⚪⚪⚪⚪  │   │
+                            │   │  ⚪⚪⚪   │   │
+                            │   ╰─────────╯   │
+                            │                 │
+                            ╰─────────────────╯
+                            ```
+                            """)
+                        
+                        # Display detection info in sidebar
+                        if detected_classes:
+                            st.sidebar.markdown("### 📊 Detection Summary:")
+                            for class_name in detected_classes:
+                                st.sidebar.write(f"• {class_name}")
+                    
+                    time.sleep(0.1)  # Small delay to prevent overwhelming the UI
+                    
+            except Exception as e:
+                st.error(f"Error in real-time detection: {str(e)}")
+                st.session_state.running_realtime = False
+        
+        # Cleanup when app stops
+        if st.session_state.cap_realtime is not None:
+            st.session_state.cap_realtime.release()
+
 # Add some helpful information
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Instructions:")
-st.sidebar.markdown("1. **Webcam**: Click 'Start Webcam' to begin real-time detection")
-st.sidebar.markdown("2. **Image Upload**: Upload an image to detect objects")
-st.sidebar.markdown("3. **Fan Control**: Fan turns ON when both chair and minifan are detected")
-st.sidebar.markdown("4. **Mobile**: Use Image Upload for best mobile experience")
-st.sidebar.markdown("5. Adjust confidence threshold to filter detections") 
+st.sidebar.markdown("1. **Image Upload**: Upload an image to detect objects (Recommended)")
+st.sidebar.markdown("2. **Webcam - Capture**: Take a single photo for detection")
+st.sidebar.markdown("3. **Webcam - Real-Time**: Continuous detection from webcam")
+st.sidebar.markdown("4. **Fan Control**: Fan turns ON when both chair and minifan are detected")
+st.sidebar.markdown("5. **Mobile**: Use Image Upload for best mobile experience")
+st.sidebar.markdown("6. **Webcam Issues**: Follow the permission guide above") 
