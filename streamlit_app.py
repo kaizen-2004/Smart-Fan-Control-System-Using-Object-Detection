@@ -15,9 +15,23 @@ def load_model():
 
 model = load_model()
 
+# Detect mobile device
+def is_mobile():
+    user_agent = st.get_option("server.userAgent")
+    mobile_keywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'Windows Phone']
+    return any(keyword in user_agent for keyword in mobile_keywords)
+
 # Sidebar for controls
 st.sidebar.title("Controls")
-option = st.sidebar.radio("Choose input source:", ("Webcam", "Image Upload"))
+
+# Show mobile warning if detected
+if is_mobile():
+    st.sidebar.warning("📱 Mobile detected: Webcam may not work. Use Image Upload instead.")
+    default_option = "Image Upload"
+else:
+    default_option = "Webcam"
+
+option = st.sidebar.radio("Choose input source:", ("Webcam", "Image Upload"), index=0 if default_option == "Webcam" else 1)
 
 # Function to check detection status and control fan
 def check_detection_status(results):
@@ -54,6 +68,15 @@ def check_detection_status(results):
 if option == "Webcam":
     st.write("### Real-Time Webcam Detection")
     
+    # Mobile warning for webcam
+    if is_mobile():
+        st.warning("""
+        📱 **Mobile Device Detected**
+        
+        Webcam access on mobile devices may not work due to browser restrictions. 
+        If webcam doesn't work, please use the **Image Upload** option instead.
+        """)
+    
     # Webcam controls
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -63,8 +86,11 @@ if option == "Webcam":
     with col3:
         confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.1)
     
-    # Camera source selection
-    camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
+    # Camera source selection (only show on desktop)
+    if not is_mobile():
+        camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
+    else:
+        camera_index = 0  # Default camera for mobile
     
     # Create placeholders for video streams
     col1, col2 = st.columns(2)
@@ -184,6 +210,10 @@ if option == "Webcam":
 elif option == "Image Upload":
     st.write("### Image Upload Detection")
     
+    # Mobile-friendly upload instructions
+    if is_mobile():
+        st.info("📱 **Mobile Tip**: You can take a photo with your camera and upload it for detection!")
+    
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
@@ -260,4 +290,5 @@ st.sidebar.markdown("### Instructions:")
 st.sidebar.markdown("1. **Webcam**: Click 'Start Webcam' to begin real-time detection")
 st.sidebar.markdown("2. **Image Upload**: Upload an image to detect objects")
 st.sidebar.markdown("3. **Fan Control**: Fan turns ON when both chair and minifan are detected")
-st.sidebar.markdown("4. Adjust confidence threshold to filter detections") 
+st.sidebar.markdown("4. **Mobile**: Use Image Upload for best mobile experience")
+st.sidebar.markdown("5. Adjust confidence threshold to filter detections") 
