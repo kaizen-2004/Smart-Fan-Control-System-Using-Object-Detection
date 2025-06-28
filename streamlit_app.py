@@ -15,23 +15,31 @@ def load_model():
 
 model = load_model()
 
-# Detect mobile device
+# Detect mobile device using JavaScript
 def is_mobile():
-    user_agent = st.get_option("server.userAgent")
-    mobile_keywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'Windows Phone']
-    return any(keyword in user_agent for keyword in mobile_keywords)
+    # Use JavaScript to detect mobile device
+    js_code = """
+    <script>
+    function checkMobile() {
+        const userAgent = navigator.userAgent;
+        const mobileKeywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'Windows Phone'];
+        const isMobile = mobileKeywords.some(keyword => userAgent.includes(keyword));
+        return isMobile;
+    }
+    </script>
+    """
+    st.markdown(js_code, unsafe_allow_html=True)
+    
+    # For now, return False to avoid issues - we'll handle mobile detection differently
+    return False
 
 # Sidebar for controls
 st.sidebar.title("Controls")
 
-# Show mobile warning if detected
-if is_mobile():
-    st.sidebar.warning("📱 Mobile detected: Webcam may not work. Use Image Upload instead.")
-    default_option = "Image Upload"
-else:
-    default_option = "Webcam"
+# Show mobile-friendly options
+st.sidebar.info("📱 **Mobile Tip**: Use Image Upload for best mobile experience!")
 
-option = st.sidebar.radio("Choose input source:", ("Webcam", "Image Upload"), index=0 if default_option == "Webcam" else 1)
+option = st.sidebar.radio("Choose input source:", ("Webcam", "Image Upload"))
 
 # Function to check detection status and control fan
 def check_detection_status(results):
@@ -68,14 +76,11 @@ def check_detection_status(results):
 if option == "Webcam":
     st.write("### Real-Time Webcam Detection")
     
-    # Mobile warning for webcam
-    if is_mobile():
-        st.warning("""
-        📱 **Mobile Device Detected**
-        
-        Webcam access on mobile devices may not work due to browser restrictions. 
-        If webcam doesn't work, please use the **Image Upload** option instead.
-        """)
+    # Webcam warning for mobile users
+    st.info("""
+    📱 **Mobile Users**: Webcam may not work on mobile devices due to browser restrictions. 
+    If webcam doesn't work, please use the **Image Upload** option instead.
+    """)
     
     # Webcam controls
     col1, col2, col3 = st.columns(3)
@@ -86,11 +91,8 @@ if option == "Webcam":
     with col3:
         confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.1)
     
-    # Camera source selection (only show on desktop)
-    if not is_mobile():
-        camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
-    else:
-        camera_index = 0  # Default camera for mobile
+    # Camera source selection
+    camera_index = st.sidebar.number_input("Camera Index", min_value=0, max_value=10, value=0, step=1, help="0=default camera, 1=second camera, etc.")
     
     # Create placeholders for video streams
     col1, col2 = st.columns(2)
@@ -211,8 +213,7 @@ elif option == "Image Upload":
     st.write("### Image Upload Detection")
     
     # Mobile-friendly upload instructions
-    if is_mobile():
-        st.info("📱 **Mobile Tip**: You can take a photo with your camera and upload it for detection!")
+    st.info("📱 **Mobile Tip**: You can take a photo with your camera and upload it for detection!")
     
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     
