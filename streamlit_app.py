@@ -6,12 +6,12 @@ from PIL import Image
 import time
 
 st.set_page_config(page_title="Smart Fan Control System Using Object Detection", layout="wide")
-st.title("YOLO Real-Time Object Detector")
+st.title("Smart Fan Control System Using Object Detection")
 
 # Load YOLO model
 @st.cache_resource
 def load_model():
-    return YOLO("last.pt")
+    return YOLO("best.pt")
 
 model = load_model()
 
