@@ -110,28 +110,33 @@ class CameraManager:
         self.frame_buffer = None
         self.last_frame_time = 0
         self.camera_errors = []
+        self.camera_in_use = False
     
     def release_camera(self):
         """Release current camera if active"""
         if self.current_camera is not None:
             try:
                 self.current_camera.release()
+                time.sleep(0.1)  # Small delay to ensure proper release
             except:
                 pass
             self.current_camera = None
             self.current_mode = None
             self.frame_buffer = None
+            self.camera_in_use = False
             gc.collect()  # Force garbage collection
     
     def get_camera(self, camera_index, mode):
         """Get camera instance, releasing any existing camera"""
-        if self.current_mode != mode:
+        # Always release camera when switching modes
+        if self.current_mode != mode or self.current_camera is None:
             self.release_camera()
         
         if self.current_camera is None:
             try:
                 self.current_camera = cv2.VideoCapture(camera_index)
                 self.current_mode = mode
+                self.camera_in_use = True
                 
                 # Set camera properties for better performance
                 self.current_camera.set(cv2.CAP_PROP_FRAME_WIDTH, MAX_FRAME_WIDTH)
@@ -199,6 +204,20 @@ class CameraManager:
         except Exception as e:
             self.camera_errors.append(f"Frame resize error: {str(e)}")
             return frame
+    
+    def force_release_all_cameras(self):
+        """Force release all camera resources - useful for troubleshooting"""
+        self.release_camera()
+        # Try to release common camera indices
+        for i in range(5):
+            try:
+                temp_cap = cv2.VideoCapture(i)
+                if temp_cap.isOpened():
+                    temp_cap.release()
+                    time.sleep(0.05)  # Small delay between releases
+            except:
+                pass
+        gc.collect()
 
 # Initialize camera manager
 if 'camera_manager' not in st.session_state:
@@ -292,17 +311,16 @@ def display_detection_results(image, results, confidence_threshold=0.5):
     with col1:
         st.write("### Original Image")
         if isinstance(image, np.ndarray):
-            st.image(image, channels="BGR", use_container_width=True)
+            st.image(image, channels="BGR")
         else:
-            st.image(image, use_container_width=True)
+            st.image(image)
     
     with col2:
         st.write("### Detection Result")
         result_img = results[0].plot()
-        st.image(result_img, channels="BGR", use_container_width=True)
+        st.image(result_img, channels="BGR")
     
-    # Check detection status and control fan
-    detected_classes, status, fan_state = check_detection_status(results)
+    # Check detection status and control fases, status, fan_state = check_detection_status(results)
     
     # Display status
     if fan_state == "fan_on":
@@ -391,6 +409,18 @@ def main():
     # Main option selection
     option = st.sidebar.radio("Choose input source:", ("Image Upload", "Webcam"), index=0)
     
+    # Track last option to release camera when switching
+    if 'last_input_option' not in st.session_state:
+        st.session_state.last_input_option = None
+    
+    # Release camera when switching from webcam to image upload
+    if st.session_state.last_input_option == "Webcam" and option == "Image Upload":
+        st.session_state.camera_manager.release_camera()
+        st.session_state.running_realtime = False
+        st.info("Switched to Image Upload mode. Camera resources have been released.")
+    
+    st.session_state.last_input_option = option
+    
     if option == "Image Upload":
         image_upload_mode()
     elif option == "Webcam":
@@ -442,8 +472,28 @@ def webcam_mode(browser_name):
     **Alternative**: If webcam doesn't work, use Image Upload mode instead.
     """)
     
+    # Add camera reset button for troubleshooting
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔧 Reset Camera Resources"):
+            st.session_state.camera_manager.force_release_all_cameras()
+            st.success("Camera resources released! Try switching modes now.")
+    
+    with col2:
+        if st.button("🔄 Refresh Page"):
+            st.rerun()
+    
     # Webcam mode selection
     webcam_mode = st.radio("Choose webcam mode:", ("Capture Image", "Real-Time Detection"), index=0)
+    
+    # Release camera when switching modes
+    if 'last_webcam_mode' not in st.session_state:
+        st.session_state.last_webcam_mode = None
+    
+    if st.session_state.last_webcam_mode != webcam_mode:
+        st.session_state.camera_manager.release_camera()
+        st.session_state.last_webcam_mode = webcam_mode
+        st.info(f"Switched to {webcam_mode} mode. Camera resources have been released.")
     
     # Confidence threshold
     confidence_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.1)
@@ -456,6 +506,10 @@ def webcam_mode(browser_name):
 def webcam_capture_mode(confidence_threshold, browser_name):
     """Handle webcam capture mode with browser compatibility"""
     try:
+        # Release any existing camera resources for capture mode
+        if st.session_state.camera_manager.current_mode != "capture":
+            st.session_state.camera_manager.release_camera()
+        
         if st.button("🔧 Test Camera Access"):
             st.info(f"Testing camera access for {browser_name}... Please allow camera permissions if prompted.")
         
@@ -478,6 +532,9 @@ def webcam_capture_mode(confidence_threshold, browser_name):
             # Show performance info
             st.sidebar.markdown("### 📊 Performance")
             st.sidebar.metric("Detection Time", f"{detection_time:.1f}ms")
+            
+            # Release camera after capture
+            st.session_state.camera_manager.release_camera()
         
         else:
             st.write("📷 **Click the camera button above to take a picture for detection**")
@@ -490,6 +547,7 @@ def webcam_capture_mode(confidence_threshold, browser_name):
             3. **Try a different browser** (Chrome, Firefox, Edge)
             4. **Use Image Upload** instead (works on all browsers)
             5. **Check camera drivers** are working
+            6. **Click 'Reset Camera Resources'** button above
             
             **Browser-specific tips:**
             {get_camera_troubleshooting_guide(browser_name)}
@@ -497,6 +555,8 @@ def webcam_capture_mode(confidence_threshold, browser_name):
             
     except Exception as e:
         st.error(f"Webcam error in {browser_name}: {str(e)}")
+        # Release camera on error
+        st.session_state.camera_manager.release_camera()
         st.info(f"""
         🔧 **Troubleshooting for {browser_name}:**
         
@@ -505,6 +565,7 @@ def webcam_capture_mode(confidence_threshold, browser_name):
         - **Try a different browser** if this one doesn't work
         - **Use Image Upload** as an alternative
         - **Check your camera drivers** are working
+        - **Click 'Reset Camera Resources'** button above
         """)
 
 def webcam_realtime_mode(confidence_threshold, browser_name):
@@ -516,6 +577,10 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
     **Note**: Real-time mode may not work on all browsers/devices.
     If it doesn't work, try the Capture Image mode or Image Upload.
     """)
+    
+    # Release any existing camera resources for realtime mode
+    if st.session_state.camera_manager.current_mode != "realtime":
+        st.session_state.camera_manager.release_camera()
     
     # Camera detection and selection
     st.sidebar.markdown("### 📹 Camera Detection")
@@ -534,6 +599,7 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
                 2. Close other apps using camera
                 3. Try Image Upload instead
                 4. Check browser permissions
+                5. Click 'Reset Camera Resources' button
                 """)
     
     # Camera source selection
@@ -603,6 +669,7 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
                 3. **Try a different camera index**
                 4. **Use Image Upload** as an alternative
                 5. **Check browser permissions** (see guide above)
+                6. **Click 'Reset Camera Resources'** button above
                 """)
                 st.session_state.running_realtime = False
                 return
@@ -616,7 +683,7 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
                     continue
                 
                 # Show original frame
-                original_placeholder.image(frame, channels="BGR", use_container_width=True)
+                original_placeholder.image(frame, channels="BGR")
                 
                 # Time the detection
                 start_time = time.time()
@@ -630,7 +697,7 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
                 # Get detection result
                 if len(results) > 0:
                     result_img = results[0].plot()
-                    detection_placeholder.image(result_img, channels="BGR", use_container_width=True)
+                    detection_placeholder.image(result_img, channels="BGR")
                     
                     # Check detection status and control fan
                     detected_classes, status, fan_state = check_detection_status(results)
@@ -696,10 +763,13 @@ def webcam_realtime_mode(confidence_threshold, browser_name):
         except Exception as e:
             st.error(f"Error in real-time detection for {browser_name}: {str(e)}")
             st.session_state.running_realtime = False
+            # Release camera on error
+            st.session_state.camera_manager.release_camera()
     
     if stop_button:
         st.session_state.running_realtime = False
         st.session_state.camera_manager.release_camera()
+        st.success("Real-time detection stopped. Camera resources released.")
 
 # ============================================================================
 # SIDEBAR INFORMATION
@@ -715,10 +785,32 @@ def display_sidebar_info():
     st.sidebar.markdown("6. **Camera Issues**: Use 'Detect Available Cameras' button")
     st.sidebar.markdown("7. **Performance**: Adjust FPS slider for optimal performance")
     st.sidebar.markdown("8. **Browser Issues**: Check browser-specific camera guide")
+    
+    st.sidebar.markdown("### 🔧 Camera Troubleshooting:")
+    st.sidebar.markdown("• **Can't access camera?** Click 'Reset Camera Resources'")
+    st.sidebar.markdown("• **Switching modes?** Camera is automatically released")
+    st.sidebar.markdown("• **Still having issues?** Try Image Upload mode")
+    st.sidebar.markdown("• **Browser problems?** Check camera permissions")
+
+def cleanup_session_state():
+    """Clean up session state when app is closed or refreshed"""
+    if 'camera_manager' in st.session_state:
+        st.session_state.camera_manager.release_camera()
+    if 'running_realtime' in st.session_state:
+        st.session_state.running_realtime = False
 
 # ============================================================================
 # RUN APPLICATION
 # ============================================================================
 if __name__ == "__main__":
-    main()
-    display_sidebar_info() 
+    try:
+        main()
+        display_sidebar_info()
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        # Ensure camera is released on error
+        if 'camera_manager' in st.session_state:
+            st.session_state.camera_manager.release_camera()
+    finally:
+        # Always cleanup resources
+        cleanup_session_state() 
