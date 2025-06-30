@@ -13,7 +13,7 @@ import sys
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-st.set_page_config(page_title="Group 7:Smart Fan Control System Using Object Detection", layout="wide")
+st.set_page_config(page_title="Group 7: Smart Fan Control System Using Object Detection", layout="wide")
 
 # Performance settings
 MAX_FRAME_WIDTH = 640
@@ -320,7 +320,8 @@ def display_detection_results(image, results, confidence_threshold=0.5):
         result_img = results[0].plot()
         st.image(result_img, channels="BGR")
     
-    # Check detection status and control fases, status, fan_state = check_detection_status(results)
+    # Check detection status and control fan
+    detected_classes, status, fan_state = check_detection_status(results)
     
     # Display status
     if fan_state == "fan_on":
